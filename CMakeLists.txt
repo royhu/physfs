@@ -25,7 +25,13 @@ endif()
 include_directories(./src)
 
 if(APPLE)
+	add_definitions(-DPHYSFS_NO_CDROM_SUPPORT)
     set(OTHER_LDFLAGS ${OTHER_LDFLAGS} "-framework IOKit -framework Foundation")
+	if (IOS)
+		set(CMAKE_OSX_ARCHITECTURES "$(ARCHS_STANDARD)")
+	else ()
+		set(CMAKE_OSX_ARCHITECTURES "$(ARCHS_STANDARD_64_BIT)")
+	endif ()
     set(PHYSFS_M_SRCS src/physfs_platform_apple.m)
 endif()
 
@@ -68,6 +74,7 @@ endif()
 #  another project or bring up a new build system: just compile all the source
 #  code and #define the things you want.
 set(PHYSFS_SRCS
+	src/physfs_aux.c
     src/physfs.c
     src/physfs_byteorder.c
     src/physfs_unicode.c
@@ -102,55 +109,64 @@ if(NOT PHYSFS_ARCHIVE_ZIP)
     add_definitions(-DPHYSFS_SUPPORTS_ZIP=0)
 endif()
 
-option(PHYSFS_ARCHIVE_7Z "Enable 7zip support" TRUE)
+option(PHYSFS_ARCHIVE_7Z "Enable 7zip support" FALSE)
 if(NOT PHYSFS_ARCHIVE_7Z)
     add_definitions(-DPHYSFS_SUPPORTS_7Z=0)
 endif()
 
-option(PHYSFS_ARCHIVE_GRP "Enable Build Engine GRP support" TRUE)
+option(PHYSFS_ARCHIVE_GRP "Enable Build Engine GRP support" FALSE)
 if(NOT PHYSFS_ARCHIVE_GRP)
     add_definitions(-DPHYSFS_SUPPORTS_GRP=0)
 endif()
 
-option(PHYSFS_ARCHIVE_WAD "Enable Doom WAD support" TRUE)
+option(PHYSFS_ARCHIVE_WAD "Enable Doom WAD support" FALSE)
 if(NOT PHYSFS_ARCHIVE_WAD)
     add_definitions(-DPHYSFS_SUPPORTS_WAD=0)
 endif()
 
-option(PHYSFS_ARCHIVE_HOG "Enable Descent I/II HOG support" TRUE)
+option(PHYSFS_ARCHIVE_HOG "Enable Descent I/II HOG support" FALSE)
 if(NOT PHYSFS_ARCHIVE_HOG)
     add_definitions(-DPHYSFS_SUPPORTS_HOG=0)
 endif()
 
-option(PHYSFS_ARCHIVE_MVL "Enable Descent I/II MVL support" TRUE)
+option(PHYSFS_ARCHIVE_MVL "Enable Descent I/II MVL support" FALSE)
 if(NOT PHYSFS_ARCHIVE_MVL)
     add_definitions(-DPHYSFS_SUPPORTS_MVL=0)
 endif()
 
-option(PHYSFS_ARCHIVE_QPAK "Enable Quake I/II QPAK support" TRUE)
+option(PHYSFS_ARCHIVE_QPAK "Enable Quake I/II QPAK support" FALSE)
 if(NOT PHYSFS_ARCHIVE_QPAK)
     add_definitions(-DPHYSFS_SUPPORTS_QPAK=0)
 endif()
 
-option(PHYSFS_ARCHIVE_SLB "Enable I-War / Independence War SLB support" TRUE)
+option(PHYSFS_ARCHIVE_SLB "Enable I-War / Independence War SLB support" FALSE)
 if(NOT PHYSFS_ARCHIVE_SLB)
     add_definitions(-DPHYSFS_SUPPORTS_SLB=0)
 endif()
 
-option(PHYSFS_ARCHIVE_ISO9660 "Enable ISO9660 support" TRUE)
+option(PHYSFS_ARCHIVE_ISO9660 "Enable ISO9660 support" FALSE)
 if(NOT PHYSFS_ARCHIVE_ISO9660)
     add_definitions(-DPHYSFS_SUPPORTS_ISO9660=0)
 endif()
 
-option(PHYSFS_ARCHIVE_VDF "Enable Gothic I/II VDF archive support" TRUE)
+option(PHYSFS_ARCHIVE_VDF "Enable Gothic I/II VDF archive support" FALSE)
 if(NOT PHYSFS_ARCHIVE_VDF)
     add_definitions(-DPHYSFS_SUPPORTS_VDF=0)
 endif()
 
-
 option(PHYSFS_BUILD_STATIC "Build static library" TRUE)
 if(PHYSFS_BUILD_STATIC)
-    add_library(physfs-static STATIC ${PHYSFS_SRCS})
+	if (APPLE)
+		if (NOT IOS)
+			add_library(physfs-static MODULE ${PHYSFS_SRCS})
+			set_target_properties(physfs-static PROPERTIES BUNDLE TRUE)
+		else ()
+			add_library(physfs-static STATIC ${PHYSFS_SRCS})
+		endif ()
+	else ()
+		add_library(physfs-static SHARED ${PHYSFS_SRCS})
+	endif ()
+
     # Don't rename this on Windows, since DLLs will also produce an import
     #  library named "physfs.lib" which would conflict; Unix tend to like the
     #  same library name with a different extension for static libs, but
@@ -168,7 +184,7 @@ if(PHYSFS_BUILD_STATIC)
     set(PHYSFS_INSTALL_TARGETS ${PHYSFS_INSTALL_TARGETS} ";physfs-static")
 endif()
 
-option(PHYSFS_BUILD_SHARED "Build shared library" TRUE)
+option(PHYSFS_BUILD_SHARED "Build shared library" FALSE)
 if(PHYSFS_BUILD_SHARED)
     add_library(physfs SHARED ${PHYSFS_SRCS})
     set_target_properties(physfs PROPERTIES MACOSX_RPATH 1)
@@ -192,7 +208,7 @@ if(PHYSFS_BUILD_SHARED AND PHYSFS_BUILD_STATIC AND NOT WINDOWS)
     set_target_properties(physfs-static PROPERTIES CLEAN_DIRECT_OUTPUT 1)
 endif()
 
-option(PHYSFS_BUILD_TEST "Build stdio test program." TRUE)
+option(PHYSFS_BUILD_TEST "Build stdio test program." FALSE)
 mark_as_advanced(PHYSFS_BUILD_TEST)
 if(PHYSFS_BUILD_TEST)
     find_path(READLINE_H readline/readline.h)
@@ -208,23 +224,18 @@ if(PHYSFS_BUILD_TEST)
             add_definitions(-DPHYSFS_HAVE_READLINE=1)
         endif()
     endif()
-    add_executable(test_physfs test/test_physfs.c)
+	add_executable(test_physfs test/test_physfs.c)
     target_link_libraries(test_physfs ${PHYSFS_LIB_TARGET} ${TEST_PHYSFS_LIBS} ${OTHER_LDFLAGS})
     set(PHYSFS_INSTALL_TARGETS ${PHYSFS_INSTALL_TARGETS} ";test_physfs")
 endif()
 
-install(TARGETS ${PHYSFS_INSTALL_TARGETS} EXPORT PhysFSExport
+if (NOT APPLE)
+install(TARGETS ${PHYSFS_INSTALL_TARGETS}
         RUNTIME DESTINATION bin
         LIBRARY DESTINATION lib${LIB_SUFFIX}
-        ARCHIVE DESTINATION lib${LIB_SUFFIX}
-        INCLUDES DESTINATION include)
+        ARCHIVE DESTINATION lib${LIB_SUFFIX})
 install(FILES src/physfs.h DESTINATION include)
-
-install(EXPORT PhysFSExport
-        DESTINATION "lib${LIB_SUFFIX}/cmake/PhysFS"
-        FILE PhysFSConfig.cmake
-)
-
+endif ()
 
 find_package(Doxygen)
 if(DOXYGEN_FOUND)
